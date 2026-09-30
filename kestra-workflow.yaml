@@ -5,7 +5,7 @@ description: Spring Boot CI/CD pipeline with EKS health checks and Discord alert
 inputs:
   - id: git_repo
     type: STRING
-    defaults: "https://github.com/your-username/eks-gitops-deploy.git"
+    defaults: "https://github.com/Abhishekkhode/eks-gitops-deploy.git"
     description: Git repository URL
 
   - id: git_branch
@@ -76,7 +76,6 @@ tasks:
       - id: notify_success
         type: io.kestra.plugin.notifications.discord.DiscordExecution
         url: "{{ kv('DISCORD_WEBHOOK_URL') ?? secret('DISCORD_WEBHOOK_URL') }}"
-        channel: "deployments"
         username: "Kestra SRE Bot"
         customFields:
           Status: "🚀 Deployment SUCCESS"
@@ -107,7 +106,6 @@ errors:
   - id: notify_discord_incident
     type: io.kestra.plugin.notifications.discord.DiscordExecution
     url: "{{ kv('DISCORD_WEBHOOK_URL') ?? secret('DISCORD_WEBHOOK_URL') }}"
-    channel: "incidents"
     username: "Kestra SRE Alert"
     customFields:
       Status: "🚨 Deployment FAILED"
