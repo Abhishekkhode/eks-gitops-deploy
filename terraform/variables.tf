@@ -43,13 +43,13 @@ variable "private_subnet_cidrs" {
 variable "cluster_version" {
   description = "Kubernetes control plane version for EKS"
   type        = string
-  default     = "1.30"
+  default     = "1.31"
 }
 
 variable "node_instance_types" {
   description = "EC2 instance types for EKS managed node group"
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.micro"]
 }
 
 variable "node_desired_size" {

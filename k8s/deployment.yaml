@@ -45,11 +45,11 @@ spec:
                   fieldPath: spec.nodeName
           resources:
             requests:
-              cpu: "250m"
-              memory: "256Mi"
+              cpu: "100m"
+              memory: "160Mi"
             limits:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: "300m"
+              memory: "320Mi"
           # Readiness probe checks application health before serving traffic
           readinessProbe:
             httpGet:

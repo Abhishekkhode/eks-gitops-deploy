@@ -12,6 +12,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp:/tmp
     command: server local
-
+ 
 volumes:
   kestra_data:

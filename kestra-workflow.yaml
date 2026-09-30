@@ -5,26 +5,27 @@ description: Spring Boot CI/CD pipeline with EKS health checks and Discord alert
 inputs:
   - id: git_repo
     type: STRING
-    defaults: "https://github.com/Abhishekkhode/eks-gitops-deploy.git"
+    defaults: "{{ kv('GIT_REPO') ?? 'https://github.com/Abhishekkhode/eks-gitops-deploy.git' }}"
     description: Git repository URL
 
   - id: git_branch
     type: STRING
-    defaults: "main"
+    defaults: "{{ kv('GIT_BRANCH') ?? 'main' }}"
     description: Branch to build and deploy
 
   - id: aws_region
     type: STRING
-    defaults: "ap-south-2"
+    defaults: "{{ kv('AWS_REGION') ?? 'ap-south-2' }}"
     description: AWS Destination Region
 
   - id: ecr_registry
     type: STRING
+    defaults: "{{ kv('ECR_REGISTRY') }}"
     description: AWS ECR Registry URI
 
   - id: eks_cluster_name
     type: STRING
-    defaults: "eks-gitops-deploy-cluster"
+    defaults: "{{ kv('EKS_CLUSTER_NAME') ?? 'eks-gitops-deploy-cluster' }}"
     description: Target EKS Cluster Name
 
 tasks:
