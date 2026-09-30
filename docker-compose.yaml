@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  kestra:
+    image: kestra/kestra:latest
+    container_name: kestra
+    ports:
+      - "8080:8080"
+    user: root
+    volumes:
+      - kestra_data:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp:/tmp
+    command: server local
+
+volumes:
+  kestra_data:

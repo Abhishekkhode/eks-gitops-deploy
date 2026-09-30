@@ -1,0 +1,10 @@
+aws_region          = "ap-south-2"
+environment         = "production"
+project_name        = "eks-gitops-deploy"
+vpc_cidr            = "10.0.0.0/16"
+availability_zones  = ["ap-south-2a", "ap-south-2b"]
+cluster_version     = "1.30"
+node_instance_types = ["t3.medium"]
+node_desired_size   = 2
+node_min_size       = 1
+node_max_size       = 3
