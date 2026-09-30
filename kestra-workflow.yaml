@@ -5,27 +5,27 @@ description: Spring Boot CI/CD pipeline with EKS health checks and Discord alert
 inputs:
   - id: git_repo
     type: STRING
-    defaults: "{{ kv('GIT_REPO') ?? 'https://github.com/Abhishekkhode/eks-gitops-deploy.git' }}"
+    defaults: "https://github.com/Abhishekkhode/eks-gitops-deploy.git"
     description: Git repository URL
 
   - id: git_branch
     type: STRING
-    defaults: "{{ kv('GIT_BRANCH') ?? 'main' }}"
+    defaults: "main"
     description: Branch to build and deploy
 
   - id: aws_region
     type: STRING
-    defaults: "{{ kv('AWS_REGION') ?? 'ap-south-2' }}"
+    defaults: "ap-south-2"
     description: AWS Destination Region
 
   - id: ecr_registry
     type: STRING
-    defaults: "{{ kv('ECR_REGISTRY') }}"
+    defaults: "733048623802.dkr.ecr.ap-south-2.amazonaws.com"
     description: AWS ECR Registry URI
 
   - id: eks_cluster_name
     type: STRING
-    defaults: "{{ kv('EKS_CLUSTER_NAME') ?? 'eks-gitops-deploy-cluster' }}"
+    defaults: "eks-gitops-deploy-cluster"
     description: Target EKS Cluster Name
 
 tasks:
@@ -35,41 +35,36 @@ tasks:
       # Clone Git repository
       - id: clone_repository
         type: io.kestra.plugin.git.Clone
-        url: "{{ inputs.git_repo }}"
-        branch: "{{ inputs.git_branch }}"
+        url: "{{ inputs.git_repo | trim }}"
+        branch: "{{ inputs.git_branch | trim }}"
 
-      # Build Docker image and push to AWS ECR
+      # Build Docker image and push to AWS ECR using Kaniko
       - id: build_and_push_image
         type: io.kestra.plugin.scripts.shell.Commands
         taskRunner:
           type: io.kestra.plugin.scripts.runner.docker.Docker
-          volumes:
-            - /var/run/docker.sock:/var/run/docker.sock
-        containerImage: alpine/k8s:1.30.2
+        containerImage: gcr.io/kaniko-project/executor:debug
         env:
           AWS_ACCESS_KEY_ID: "{{ kv('AWS_ACCESS_KEY_ID') ?? secret('AWS_ACCESS_KEY_ID') }}"
           AWS_SECRET_ACCESS_KEY: "{{ kv('AWS_SECRET_ACCESS_KEY') ?? secret('AWS_SECRET_ACCESS_KEY') }}"
-          AWS_DEFAULT_REGION: "{{ inputs.aws_region }}"
+          AWS_REGION: "{{ inputs.aws_region | trim }}"
         commands:
-          - apk add --no-cache docker-cli
-          - aws ecr get-login-password --region {{ inputs.aws_region }} | docker login --username AWS --password-stdin {{ inputs.ecr_registry }}
-          - docker build -t {{ inputs.ecr_registry }}/eks-gitops-deploy:{{ execution.id }} .
-          - docker push {{ inputs.ecr_registry }}/eks-gitops-deploy:{{ execution.id }}
+          - /kaniko/executor --context dir://. --dockerfile Dockerfile --destination {{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }}
 
       # Deploy to EKS and verify rollout
       - id: deploy_and_verify_rollout
         type: io.kestra.plugin.scripts.shell.Commands
         taskRunner:
           type: io.kestra.plugin.scripts.runner.docker.Docker
-        containerImage: alpine/k8s:1.30.2
+        containerImage: alpine/k8s:1.31.0
         env:
           AWS_ACCESS_KEY_ID: "{{ kv('AWS_ACCESS_KEY_ID') ?? secret('AWS_ACCESS_KEY_ID') }}"
           AWS_SECRET_ACCESS_KEY: "{{ kv('AWS_SECRET_ACCESS_KEY') ?? secret('AWS_SECRET_ACCESS_KEY') }}"
-          AWS_DEFAULT_REGION: "{{ inputs.aws_region }}"
+          AWS_DEFAULT_REGION: "{{ inputs.aws_region | trim }}"
         commands:
-          - aws eks update-kubeconfig --region {{ inputs.aws_region }} --name {{ inputs.eks_cluster_name }}
+          - aws eks update-kubeconfig --region {{ inputs.aws_region | trim }} --name {{ inputs.eks_cluster_name | trim }}
           - kubectl create namespace production --dry-run=client -o yaml | kubectl apply -f -
-          - sed -i "s|IMAGE_PLACEHOLDER|{{ inputs.ecr_registry }}/eks-gitops-deploy:{{ execution.id }}|g" k8s/deployment.yaml
+          - sed -i "s|IMAGE_PLACEHOLDER|{{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }}|g" k8s/deployment.yaml
           - kubectl apply -f k8s/
           - kubectl rollout status deployment/eks-gitops-deploy -n production --timeout=180s
 
@@ -90,13 +85,13 @@ errors:
     type: io.kestra.plugin.scripts.shell.Commands
     taskRunner:
       type: io.kestra.plugin.scripts.runner.docker.Docker
-    containerImage: alpine/k8s:1.30.2
+    containerImage: alpine/k8s:1.31.0
     env:
       AWS_ACCESS_KEY_ID: "{{ kv('AWS_ACCESS_KEY_ID') ?? secret('AWS_ACCESS_KEY_ID') }}"
       AWS_SECRET_ACCESS_KEY: "{{ kv('AWS_SECRET_ACCESS_KEY') ?? secret('AWS_SECRET_ACCESS_KEY') }}"
-      AWS_DEFAULT_REGION: "{{ inputs.aws_region }}"
+      AWS_DEFAULT_REGION: "{{ inputs.aws_region | trim }}"
     commands:
-      - aws eks update-kubeconfig --region {{ inputs.aws_region }} --name {{ inputs.eks_cluster_name }}
+      - aws eks update-kubeconfig --region {{ inputs.aws_region | trim }} --name {{ inputs.eks_cluster_name | trim }}
       - echo "=== POD STATUS ==="
       - kubectl get pods -n production -l app=eks-gitops-deploy
       - echo "=== CRASH LOGS ==="
