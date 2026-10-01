@@ -1,5 +1,5 @@
 # Build stage
-FROM maven:3.9.8-eclipse-temurin-17-alpine AS builder
+FROM --platform=linux/amd64 maven:3.9.8-eclipse-temurin-17-alpine AS builder
 WORKDIR /build
 
 # Build application
@@ -8,7 +8,7 @@ COPY src ./src
 RUN mvn clean package -DskipTests -B
 
 # Runtime stage
-FROM eclipse-temurin:17-jre-alpine
+FROM --platform=linux/amd64 eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
 # Run as non-root user

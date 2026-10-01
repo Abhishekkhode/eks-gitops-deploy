@@ -49,7 +49,7 @@ tasks:
           AWS_SECRET_ACCESS_KEY: "{{ kv('AWS_SECRET_ACCESS_KEY') ?? secret('AWS_SECRET_ACCESS_KEY') }}"
           AWS_REGION: "{{ inputs.aws_region | trim }}"
         commands:
-          - /kaniko/executor --context dir://. --dockerfile Dockerfile --destination {{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }}
+          - /kaniko/executor --context dir://. --dockerfile Dockerfile --destination {{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }} --custom-platform=linux/amd64
 
       # Deploy to EKS and verify rollout
       - id: deploy_and_verify_rollout
@@ -70,14 +70,13 @@ tasks:
 
       # Send success notification to Discord
       - id: notify_success
-        type: io.kestra.plugin.notifications.discord.DiscordExecution
+        type: io.kestra.plugin.notifications.discord.DiscordIncomingWebhook
         url: "{{ kv('DISCORD_WEBHOOK_URL') ?? secret('DISCORD_WEBHOOK_URL') }}"
-        username: "Kestra SRE Bot"
-        customFields:
-          Status: "🚀 Deployment SUCCESS"
-          Cluster: "{{ inputs.eks_cluster_name }}"
-          Image: "{{ inputs.ecr_registry }}/eks-gitops-deploy:{{ execution.id }}"
-          Execution: "{{ flow.id }} - {{ execution.id }}"
+        payload: |
+          {
+            "username": "Kestra SRE Bot",
+            "content": "🚀 **Deployment SUCCESS**\n• **Cluster**: `{{ inputs.eks_cluster_name }}`\n• **Image**: `{{ inputs.ecr_registry }}/eks-gitops-deploy:{{ execution.id }}`\n• **Execution**: `{{ flow.id }} - {{ execution.id }}`"
+          }
 
 # Run on failure to fetch pod logs and send alert
 errors:
@@ -100,13 +99,13 @@ errors:
       - kubectl get events -n production --sort-by='.metadata.creationTimestamp' | tail -n 20 || true
 
   - id: notify_discord_incident
-    type: io.kestra.plugin.notifications.discord.DiscordExecution
+    type: io.kestra.plugin.notifications.discord.DiscordIncomingWebhook
     url: "{{ kv('DISCORD_WEBHOOK_URL') ?? secret('DISCORD_WEBHOOK_URL') }}"
-    username: "Kestra SRE Alert"
-    customFields:
-      Status: "🚨 Deployment FAILED"
-      Cluster: "{{ inputs.eks_cluster_name }}"
-      FailedExecution: "{{ execution.id }}"
+    payload: |
+      {
+        "username": "Kestra SRE Alert",
+        "content": "🚨 **Deployment FAILED**\n• **Cluster**: `{{ inputs.eks_cluster_name }}`\n• **Execution**: `{{ flow.id }} - {{ execution.id }}`"
+      }
 
 triggers:
   - id: github_webhook
