@@ -38,18 +38,23 @@ tasks:
         url: "{{ inputs.git_repo | trim }}"
         branch: "{{ inputs.git_branch | trim }}"
 
-      # Build Docker image and push to AWS ECR using Kaniko
+      # Build Docker image and push to AWS ECR
       - id: build_and_push_image
         type: io.kestra.plugin.scripts.shell.Commands
         taskRunner:
           type: io.kestra.plugin.scripts.runner.docker.Docker
-        containerImage: gcr.io/kaniko-project/executor:debug
+          volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+        containerImage: alpine/k8s:1.31.0
         env:
           AWS_ACCESS_KEY_ID: "{{ kv('AWS_ACCESS_KEY_ID') ?? secret('AWS_ACCESS_KEY_ID') }}"
           AWS_SECRET_ACCESS_KEY: "{{ kv('AWS_SECRET_ACCESS_KEY') ?? secret('AWS_SECRET_ACCESS_KEY') }}"
-          AWS_REGION: "{{ inputs.aws_region | trim }}"
+          AWS_DEFAULT_REGION: "{{ inputs.aws_region | trim }}"
         commands:
-          - /kaniko/executor --context dir://. --dockerfile Dockerfile --destination {{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }} --custom-platform=linux/amd64
+          - apk add --no-cache docker-cli
+          - aws ecr get-login-password --region {{ inputs.aws_region | trim }} | docker login --username AWS --password-stdin {{ inputs.ecr_registry | trim }}
+          - docker build --platform linux/amd64 -t {{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }} .
+          - docker push {{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }}
 
       # Deploy to EKS and verify rollout
       - id: deploy_and_verify_rollout
