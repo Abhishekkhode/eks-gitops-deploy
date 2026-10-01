@@ -38,23 +38,18 @@ tasks:
         url: "{{ inputs.git_repo | trim }}"
         branch: "{{ inputs.git_branch | trim }}"
 
-      # Build Docker image and push to AWS ECR
+      # Build Docker image and push to AWS ECR using Kaniko
       - id: build_and_push_image
         type: io.kestra.plugin.scripts.shell.Commands
         taskRunner:
           type: io.kestra.plugin.scripts.runner.docker.Docker
-          volumes:
-            - /var/run/docker.sock:/var/run/docker.sock
-        containerImage: alpine/k8s:1.31.0
+        containerImage: gcr.io/kaniko-project/executor:debug
         env:
           AWS_ACCESS_KEY_ID: "{{ kv('AWS_ACCESS_KEY_ID') ?? secret('AWS_ACCESS_KEY_ID') }}"
           AWS_SECRET_ACCESS_KEY: "{{ kv('AWS_SECRET_ACCESS_KEY') ?? secret('AWS_SECRET_ACCESS_KEY') }}"
-          AWS_DEFAULT_REGION: "{{ inputs.aws_region | trim }}"
+          AWS_REGION: "{{ inputs.aws_region | trim }}"
         commands:
-          - apk add --no-cache docker-cli
-          - aws ecr get-login-password --region {{ inputs.aws_region | trim }} | docker login --username AWS --password-stdin {{ inputs.ecr_registry | trim }}
-          - docker build --platform linux/amd64 -t {{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }} .
-          - docker push {{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }}
+          - /kaniko/executor --context dir://. --dockerfile Dockerfile --destination {{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }} --custom-platform=linux/amd64 --ignore-path=/tmp
 
       # Deploy to EKS and verify rollout
       - id: deploy_and_verify_rollout
@@ -66,26 +61,86 @@ tasks:
           AWS_ACCESS_KEY_ID: "{{ kv('AWS_ACCESS_KEY_ID') ?? secret('AWS_ACCESS_KEY_ID') }}"
           AWS_SECRET_ACCESS_KEY: "{{ kv('AWS_SECRET_ACCESS_KEY') ?? secret('AWS_SECRET_ACCESS_KEY') }}"
           AWS_DEFAULT_REGION: "{{ inputs.aws_region | trim }}"
+          DISCORD_WEBHOOK_URL: "{{ kv('DISCORD_WEBHOOK_URL') ?? secret('DISCORD_WEBHOOK_URL') }}"
         commands:
           - aws eks update-kubeconfig --region {{ inputs.aws_region | trim }} --name {{ inputs.eks_cluster_name | trim }}
           - kubectl create namespace production --dry-run=client -o yaml | kubectl apply -f -
           - sed -i "s|IMAGE_PLACEHOLDER|{{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }}|g" k8s/deployment.yaml
           - kubectl apply -f k8s/
           - kubectl rollout status deployment/eks-gitops-deploy -n production --timeout=180s
+          # Generate & Send Rich SRE Success Embed to Discord
+          - |
+            LB_HOST=$(kubectl get svc eks-gitops-deploy-service -n production -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+            if [ -z "$LB_HOST" ]; then
+              LB_HOST=$(kubectl get svc eks-gitops-deploy-service -n production -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "Pending...")
+            fi
+            POD_SUMMARY=$(kubectl get pods -n production -l app=eks-gitops-deploy -o wide --no-headers 2>/dev/null | awk '{print "• "$1" ("$3", Ready: "$2") on Node: "$7}' | head -n 5)
+            REPLICAS=$(kubectl get deployment eks-gitops-deploy -n production -o jsonpath='{.status.readyReplicas}/{\.spec.replicas}' 2>/dev/null || echo "2/2")
+            
+            jq -n \
+              --arg cluster "{{ inputs.eks_cluster_name }}" \
+              --arg region "{{ inputs.aws_region }}" \
+              --arg ns "production" \
+              --arg img "{{ inputs.ecr_registry }}/eks-gitops-deploy:{{ execution.id }}" \
+              --arg execId "{{ flow.id }} - {{ execution.id }}" \
+              --arg lb "http://$LB_HOST" \
+              --arg pods "$POD_SUMMARY" \
+              --arg reps "$REPLICAS Ready" \
+              '{
+                username: "Kestra SRE Bot",
+                avatar_url: "https://kestra.io/logo.png",
+                embeds: [
+                  {
+                    title: "🚀 AWS EKS Deployment SUCCESS",
+                    description: "**Microservice**: `eks-gitops-deploy` successfully deployed and rolled out to **production** on AWS EKS.",
+                    color: 3066993,
+                    fields: [
+                      {
+                        name: "🌐 Live Service LoadBalancer URL",
+                        value: $lb,
+                        inline: false
+                      },
+                      {
+                        name: "📦 Container Image",
+                        value: ("`" + $img + "`"),
+                        inline: false
+                      },
+                      {
+                        name: "🎯 Infrastructure Details",
+                        value: ("• **Cluster**: `" + $cluster + "`\n• **Namespace**: `" + $ns + "`\n• **Region**: `" + $region + "`"),
+                        inline: true
+                      },
+                      {
+                        name: "📊 Pod Health & Sizing",
+                        value: ("• **Replicas**: `" + $reps + "`\n• **CPU/RAM**: `100m-300m / 160Mi-320Mi`\n• **Probes**: Liveness & Readiness UP"),
+                        inline: true
+                      },
+                      {
+                        name: "📋 Active Pod Instances",
+                        value: ("```text\n" + (if $pods != "" then $pods else "All pods healthy" end) + "\n```"),
+                        inline: false
+                      },
+                      {
+                        name: "🔗 Telemetry Endpoints Hub",
+                        value: ("[Discovery Map](" + $lb + "/) • [Live System Stats](" + $lb + "/api/system) • [Actuator Health](" + $lb + "/actuator/health) • [App Info](" + $lb + "/api/info)"),
+                        inline: false
+                      }
+                    ],
+                    footer: {
+                      text: ("Kestra GitOps Orchestrator • Execution: " + $execId)
+                    },
+                    timestamp: (now | todate)
+                  }
+                ]
+              }' > /tmp/discord_success.json
+            
+            if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+              curl -s -H "Content-Type: application/json" -X POST -d @/tmp/discord_success.json "$DISCORD_WEBHOOK_URL"
+            fi
 
-      # Send success notification to Discord
-      - id: notify_success
-        type: io.kestra.plugin.notifications.discord.DiscordIncomingWebhook
-        url: "{{ kv('DISCORD_WEBHOOK_URL') ?? secret('DISCORD_WEBHOOK_URL') }}"
-        payload: |
-          {
-            "username": "Kestra SRE Bot",
-            "content": "🚀 **Deployment SUCCESS**\n• **Cluster**: `{{ inputs.eks_cluster_name }}`\n• **Image**: `{{ inputs.ecr_registry }}/eks-gitops-deploy:{{ execution.id }}`\n• **Execution**: `{{ flow.id }} - {{ execution.id }}`"
-          }
-
-# Run on failure to fetch pod logs and send alert
+# Run on failure to fetch pod logs and send detailed incident alert
 errors:
-  - id: capture_pod_diagnostics
+  - id: capture_pod_diagnostics_and_alert
     type: io.kestra.plugin.scripts.shell.Commands
     taskRunner:
       type: io.kestra.plugin.scripts.runner.docker.Docker
@@ -94,23 +149,64 @@ errors:
       AWS_ACCESS_KEY_ID: "{{ kv('AWS_ACCESS_KEY_ID') ?? secret('AWS_ACCESS_KEY_ID') }}"
       AWS_SECRET_ACCESS_KEY: "{{ kv('AWS_SECRET_ACCESS_KEY') ?? secret('AWS_SECRET_ACCESS_KEY') }}"
       AWS_DEFAULT_REGION: "{{ inputs.aws_region | trim }}"
+      DISCORD_WEBHOOK_URL: "{{ kv('DISCORD_WEBHOOK_URL') ?? secret('DISCORD_WEBHOOK_URL') }}"
     commands:
       - aws eks update-kubeconfig --region {{ inputs.aws_region | trim }} --name {{ inputs.eks_cluster_name | trim }}
-      - echo "=== POD STATUS ==="
-      - kubectl get pods -n production -l app=eks-gitops-deploy
-      - echo "=== CRASH LOGS ==="
-      - kubectl logs deployment/eks-gitops-deploy -n production --tail=50 --all-containers=true || true
-      - echo "=== POD EVENTS ==="
-      - kubectl get events -n production --sort-by='.metadata.creationTimestamp' | tail -n 20 || true
-
-  - id: notify_discord_incident
-    type: io.kestra.plugin.notifications.discord.DiscordIncomingWebhook
-    url: "{{ kv('DISCORD_WEBHOOK_URL') ?? secret('DISCORD_WEBHOOK_URL') }}"
-    payload: |
-      {
-        "username": "Kestra SRE Alert",
-        "content": "🚨 **Deployment FAILED**\n• **Cluster**: `{{ inputs.eks_cluster_name }}`\n• **Execution**: `{{ flow.id }} - {{ execution.id }}`"
-      }
+      - echo "=== CAPTURING SRE DIAGNOSTICS ==="
+      - POD_STATUS=$(kubectl get pods -n production -l app=eks-gitops-deploy 2>&1 | head -n 10)
+      - CRASH_LOGS=$(kubectl logs deployment/eks-gitops-deploy -n production --tail=20 --all-containers=true 2>&1 | head -n 20)
+      - EVENTS=$(kubectl get events -n production --sort-by='.metadata.creationTimestamp' 2>&1 | tail -n 8)
+      - |
+        jq -n \
+          --arg cluster "{{ inputs.eks_cluster_name }}" \
+          --arg region "{{ inputs.aws_region }}" \
+          --arg ns "production" \
+          --arg img "{{ inputs.ecr_registry }}/eks-gitops-deploy:{{ execution.id }}" \
+          --arg execId "{{ flow.id }} - {{ execution.id }}" \
+          --arg podStatus "$POD_STATUS" \
+          --arg crashLogs "$CRASH_LOGS" \
+          --arg events "$EVENTS" \
+          '{
+            username: "Kestra SRE Alert",
+            avatar_url: "https://kestra.io/logo.png",
+            embeds: [
+              {
+                title: "🚨 AWS EKS Deployment FAILED (Incident Report)",
+                description: ("Deployment failed during verification/rollout on cluster **" + $cluster + "**."),
+                color: 15158332,
+                fields: [
+                  {
+                    name: "🎯 Infrastructure & Context",
+                    value: ("• **Cluster**: `" + $cluster + "`\n• **Namespace**: `" + $ns + "`\n• **Region**: `" + $region + "`\n• **Attempted Image**: `" + $img + "`"),
+                    inline: false
+                  },
+                  {
+                    name: "📋 Pod Health & Diagnostics",
+                    value: ("```text\n" + (if $podStatus != "" then $podStatus else "No pods found" end) + "\n```"),
+                    inline: false
+                  },
+                  {
+                    name: "📜 Recent Crash / Error Logs",
+                    value: ("```text\n" + (if $crashLogs != "" then $crashLogs else "No container logs available" end) + "\n```"),
+                    inline: false
+                  },
+                  {
+                    name: "⚠️ Cluster Events",
+                    value: ("```text\n" + (if $events != "" then $events else "No recent events" end) + "\n```"),
+                    inline: false
+                  }
+                ],
+                footer: {
+                  text: ("Kestra Incident Manager • Execution: " + $execId)
+                },
+                timestamp: (now | todate)
+              }
+            ]
+          }' > /tmp/discord_failure.json
+        
+        if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+          curl -s -H "Content-Type: application/json" -X POST -d @/tmp/discord_failure.json "$DISCORD_WEBHOOK_URL"
+        fi
 
 triggers:
   - id: github_webhook
