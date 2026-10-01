@@ -1,6 +1,6 @@
-# 🚀 eks-gitops-deploy: Cloud-Native Spring Boot SRE & IaC Blueprint
+# 🚀 eks-gitops-deploy: Cloud-Native Spring Boot GitOps & IaC Blueprint
 
-A production-grade, containerized Spring Boot 3 microservice engineered for automated deployment, telemetry verification, and incident alerting with **Terraform (IaC)**, **Kestra Orchestrator**, **AWS EKS**, and **Discord**.
+A production-grade, containerized Spring Boot 3 application engineered for automated deployment, telemetry verification, and incident alerting with **Terraform (IaC)**, **Kestra Orchestrator**, **AWS EKS**, and **Discord**.
 
 ---
 
@@ -13,7 +13,7 @@ A production-grade, containerized Spring Boot 3 microservice engineered for auto
 | `GET` | `/api/hello` | Hello World & baseline connectivity check |
 | `GET` | `/api/info` | Application metadata, author information, and blueprint specs |
 | `GET` | `/api/system` | Live server uptime, JVM telemetry, UTC timestamp, and AWS EKS host resource metadata |
-| `GET` | `/api/status` | SRE status summary |
+| `GET` | `/api/status` | Deployment status summary |
 
 ---
 
@@ -41,7 +41,7 @@ A production-grade, containerized Spring Boot 3 microservice engineered for auto
 │   └── service.yaml                     # Kubernetes LoadBalancer Service
 ├── Dockerfile                           # Hardened Multi-Stage Container Build
 ├── docker-compose.yaml                  # Local Kestra Orchestrator Service
-├── kestra-workflow.yaml                 # Complete Kestra SRE Blueprint Workflow
+├── kestra-workflow.yaml                 # Complete Kestra GitOps Workflow
 └── pom.xml                              # Maven Configuration (Java 17, Spring Boot 3.3.4)
 ```
 

@@ -14,7 +14,7 @@ public class HomeController {
     @GetMapping("/")
     public ResponseEntity<Map<String, Object>> root() {
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("service", "Kestra SRE Spring Boot Demo");
+        response.put("service", "eks-gitops-deploy Spring Boot Service");
         response.put("status", "UP");
         response.put("timestamp", Instant.now().toString());
         response.put("availableEndpoints", Map.of(

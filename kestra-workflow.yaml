@@ -68,7 +68,7 @@ tasks:
           - sed -i "s|IMAGE_PLACEHOLDER|{{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }}|g" k8s/deployment.yaml
           - kubectl apply -f k8s/
           - kubectl rollout status deployment/eks-gitops-deploy -n production --timeout=420s
-          # Generate & Send Rich SRE Success Embed to Discord
+          # Generate & Send Deployment Success Notification to Discord
           - |
             LB_HOST=$(kubectl get svc eks-gitops-deploy-service -n production -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
             if [ -z "$LB_HOST" ]; then
@@ -87,12 +87,12 @@ tasks:
               --arg pods "$POD_SUMMARY" \
               --arg reps "$REPLICAS Ready" \
               '{
-                username: "Kestra SRE Bot",
+                username: "eks-gitops-deploy Bot",
                 avatar_url: "https://kestra.io/logo.png",
                 embeds: [
                   {
                     title: "🚀 AWS EKS Deployment SUCCESS",
-                    description: "**Microservice**: `eks-gitops-deploy` successfully deployed and rolled out to **production** on AWS EKS.",
+                    description: "**Application**: `eks-gitops-deploy` successfully deployed and rolled out to **production** on AWS EKS.",
                     color: 3066993,
                     fields: [
                       {
@@ -154,7 +154,7 @@ errors:
       - |
         set +e
         aws eks update-kubeconfig --region {{ inputs.aws_region | trim }} --name {{ inputs.eks_cluster_name | trim }} || true
-        echo "=== CAPTURING SRE DIAGNOSTICS ==="
+        echo "=== CAPTURING DEPLOYMENT DIAGNOSTICS ==="
         POD_STATUS=$(kubectl get pods -n production -l app=eks-gitops-deploy 2>&1 | head -n 6 | head -c 800)
         CRASH_LOGS=$(kubectl logs deployment/eks-gitops-deploy -n production --tail=15 --all-containers=true 2>&1 | head -c 800)
         EVENTS=$(kubectl get events -n production --sort-by='.metadata.creationTimestamp' 2>&1 | tail -n 6 | head -c 800)
@@ -173,11 +173,11 @@ errors:
           --arg crashLogs "$CRASH_LOGS" \
           --arg events "$EVENTS" \
           '{
-            username: "Kestra SRE Alert",
+            username: "eks-gitops-deploy Alert",
             avatar_url: "https://kestra.io/logo.png",
             embeds: [
               {
-                title: "🚨 AWS EKS Deployment FAILED (Incident Report)",
+                title: "🚨 AWS EKS Deployment FAILED",
                 description: ("Deployment failed during verification/rollout on cluster **" + $cluster + "**."),
                 color: 15158332,
                 fields: [
@@ -203,7 +203,7 @@ errors:
                   }
                 ],
                 footer: {
-                  text: ("Kestra Incident Manager • Execution: " + $execId)
+                  text: ("Kestra GitOps Orchestrator • Execution: " + $execId)
                 },
                 timestamp: (now | todate)
               }

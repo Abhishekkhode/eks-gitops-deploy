@@ -17,7 +17,7 @@ provider "aws" {
       Project     = "eks-gitops-deploy"
       ManagedBy   = "Terraform"
       Environment = var.environment
-      Blueprint   = "Kestra-SRE-GitOps"
+      Blueprint   = "eks-gitops-deploy"
     }
   }
 }
