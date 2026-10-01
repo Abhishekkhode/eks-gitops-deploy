@@ -235,3 +235,6 @@ Once deployed, the application exposes the following endpoints via the AWS LoadB
 **Abhishek Khode**
 * GitHub: [@Abhishekkhode](https://github.com/Abhishekkhode)
 * Repository: [eks-gitops-deploy](https://github.com/Abhishekkhode/eks-gitops-deploy)
+* LinkedIn : [Abhishek Khode](https://www.linkedin.com/in/abhishek-khode-1650372a0/)
+
+
