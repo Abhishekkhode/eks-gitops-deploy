@@ -60,16 +60,16 @@ spec:
             httpGet:
               path: /actuator/health/readiness
               port: 8080
-            initialDelaySeconds: 20
-            periodSeconds: 10
+            initialDelaySeconds: 15
+            periodSeconds: 5
             timeoutSeconds: 3
-            failureThreshold: 3
+            failureThreshold: 5
           # Liveness probe restarts pod if unhealthy
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
               port: 8080
             initialDelaySeconds: 30
-            periodSeconds: 15
+            periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3

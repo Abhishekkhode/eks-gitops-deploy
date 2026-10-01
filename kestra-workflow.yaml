@@ -67,7 +67,7 @@ tasks:
           - kubectl create namespace production --dry-run=client -o yaml | kubectl apply -f -
           - sed -i "s|IMAGE_PLACEHOLDER|{{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }}|g" k8s/deployment.yaml
           - kubectl apply -f k8s/
-          - kubectl rollout status deployment/eks-gitops-deploy -n production --timeout=300s
+          - kubectl rollout status deployment/eks-gitops-deploy -n production --timeout=420s
           # Generate & Send Rich SRE Success Embed to Discord
           - |
             LB_HOST=$(kubectl get svc eks-gitops-deploy-service -n production -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
@@ -151,12 +151,18 @@ errors:
       AWS_DEFAULT_REGION: "{{ inputs.aws_region | trim }}"
       DISCORD_WEBHOOK_URL: "{{ kv('DISCORD_WEBHOOK_URL') ?? secret('DISCORD_WEBHOOK_URL') }}"
     commands:
-      - aws eks update-kubeconfig --region {{ inputs.aws_region | trim }} --name {{ inputs.eks_cluster_name | trim }}
-      - echo "=== CAPTURING SRE DIAGNOSTICS ==="
-      - POD_STATUS=$(kubectl get pods -n production -l app=eks-gitops-deploy 2>&1 | head -n 10)
-      - CRASH_LOGS=$(kubectl logs deployment/eks-gitops-deploy -n production --tail=20 --all-containers=true 2>&1 | head -n 20)
-      - EVENTS=$(kubectl get events -n production --sort-by='.metadata.creationTimestamp' 2>&1 | tail -n 8)
       - |
+        set +e
+        aws eks update-kubeconfig --region {{ inputs.aws_region | trim }} --name {{ inputs.eks_cluster_name | trim }} || true
+        echo "=== CAPTURING SRE DIAGNOSTICS ==="
+        POD_STATUS=$(kubectl get pods -n production -l app=eks-gitops-deploy 2>&1 | head -n 6 | head -c 800)
+        CRASH_LOGS=$(kubectl logs deployment/eks-gitops-deploy -n production --tail=15 --all-containers=true 2>&1 | head -c 800)
+        EVENTS=$(kubectl get events -n production --sort-by='.metadata.creationTimestamp' 2>&1 | tail -n 6 | head -c 800)
+        
+        [ -z "$POD_STATUS" ] && POD_STATUS="No pod status available"
+        [ -z "$CRASH_LOGS" ] && CRASH_LOGS="No container logs available"
+        [ -z "$EVENTS" ] && EVENTS="No recent events"
+
         jq -n \
           --arg cluster "{{ inputs.eks_cluster_name }}" \
           --arg region "{{ inputs.aws_region }}" \
@@ -182,17 +188,17 @@ errors:
                   },
                   {
                     name: "📋 Pod Health & Diagnostics",
-                    value: ("```text\n" + (if $podStatus != "" then $podStatus else "No pods found" end) + "\n```"),
+                    value: ("```text\n" + $podStatus + "\n```"),
                     inline: false
                   },
                   {
                     name: "📜 Recent Crash / Error Logs",
-                    value: ("```text\n" + (if $crashLogs != "" then $crashLogs else "No container logs available" end) + "\n```"),
+                    value: ("```text\n" + $crashLogs + "\n```"),
                     inline: false
                   },
                   {
                     name: "⚠️ Cluster Events",
-                    value: ("```text\n" + (if $events != "" then $events else "No recent events" end) + "\n```"),
+                    value: ("```text\n" + $events + "\n```"),
                     inline: false
                   }
                 ],
@@ -203,9 +209,12 @@ errors:
               }
             ]
           }' > /tmp/discord_failure.json
-        
+
         if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+          echo "Sending incident embed to Discord..."
           curl -s -H "Content-Type: application/json" -X POST -d @/tmp/discord_failure.json "$DISCORD_WEBHOOK_URL"
+        else
+          echo "Warning: DISCORD_WEBHOOK_URL is not set!"
         fi
 
 triggers:
