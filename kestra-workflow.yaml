@@ -66,8 +66,9 @@ tasks:
           - aws eks update-kubeconfig --region {{ inputs.aws_region | trim }} --name {{ inputs.eks_cluster_name | trim }}
           - kubectl create namespace production --dry-run=client -o yaml | kubectl apply -f -
           - sed -i "s|IMAGE_PLACEHOLDER|{{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }}|g" k8s/deployment.yaml
+          - grep -q "maxSurge" k8s/deployment.yaml || sed -i '/replicas: 2/a \  strategy:\n    type: RollingUpdate\n    rollingUpdate:\n      maxSurge: 0\n      maxUnavailable: 1' k8s/deployment.yaml
           - kubectl apply -f k8s/
-          - kubectl rollout status deployment/eks-gitops-deploy -n production --timeout=180s
+          - kubectl rollout status deployment/eks-gitops-deploy -n production --timeout=300s
           # Generate & Send Rich SRE Success Embed to Discord
           - |
             LB_HOST=$(kubectl get svc eks-gitops-deploy-service -n production -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
