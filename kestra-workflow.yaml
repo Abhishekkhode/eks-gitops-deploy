@@ -2,10 +2,14 @@ id: eks_gitops_deploy_pipeline
 namespace: prod.deployments
 description: Spring Boot CI/CD pipeline with EKS health checks and Discord alerts
 
+concurrency:
+  behavior: QUEUE
+  limit: 1
+
 inputs:
   - id: git_repo
     type: STRING
-    defaults: "https://github.com/Abhishekkhode/eks-gitops-deploy.git"
+    defaults: "https://github.com/your-username/eks-gitops-deploy.git"
     description: Git repository URL
 
   - id: git_branch
@@ -20,7 +24,7 @@ inputs:
 
   - id: ecr_registry
     type: STRING
-    defaults: "733048623802.dkr.ecr.ap-south-2.amazonaws.com"
+    defaults: "your-account-id.dkr.ecr.ap-south-2.amazonaws.com"
     description: AWS ECR Registry URI
 
   - id: eks_cluster_name
@@ -32,13 +36,13 @@ tasks:
   - id: working_dir
     type: io.kestra.plugin.core.flow.WorkingDirectory
     tasks:
-      # Clone Git repository
+      # Clone repository
       - id: clone_repository
         type: io.kestra.plugin.git.Clone
         url: "{{ inputs.git_repo | trim }}"
         branch: "{{ inputs.git_branch | trim }}"
 
-      # Build Docker image and push to AWS ECR using Kaniko
+      # Build and push image
       - id: build_and_push_image
         type: io.kestra.plugin.scripts.shell.Commands
         taskRunner:
@@ -51,7 +55,7 @@ tasks:
         commands:
           - /kaniko/executor --context dir://. --dockerfile Dockerfile --destination {{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }} --custom-platform=linux/amd64 --ignore-path=/tmp
 
-      # Deploy to EKS and verify rollout
+      # Deploy and verify rollout
       - id: deploy_and_verify_rollout
         type: io.kestra.plugin.scripts.shell.Commands
         taskRunner:
@@ -68,7 +72,7 @@ tasks:
           - sed -i "s|IMAGE_PLACEHOLDER|{{ inputs.ecr_registry | trim }}/eks-gitops-deploy:{{ execution.id }}|g" k8s/deployment.yaml
           - kubectl apply -f k8s/
           - kubectl rollout status deployment/eks-gitops-deploy -n production --timeout=420s
-          # Generate & Send Deployment Success Notification to Discord
+          # Discord success notification
           - |
             LB_HOST=$(kubectl get svc eks-gitops-deploy-service -n production -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
             if [ -z "$LB_HOST" ]; then
@@ -138,7 +142,7 @@ tasks:
               curl -s -H "Content-Type: application/json" -X POST -d @/tmp/discord_success.json "$DISCORD_WEBHOOK_URL"
             fi
 
-# Run on failure to fetch pod logs and send detailed incident alert
+# Error handler
 errors:
   - id: capture_pod_diagnostics_and_alert
     type: io.kestra.plugin.scripts.shell.Commands

@@ -26,10 +26,10 @@ public class AppController {
     @Value("${app.blueprint:Kestra EKS Pipeline}")
     private String blueprintName;
 
-    @Value("${app.author:Abhishek}")
+    @Value("${app.author:Abhishek Khode}")
     private String author;
 
-    // Health and route discovery
+    // Endpoints
     @GetMapping({"", "/", "/hello"})
     public ResponseEntity<Map<String, Object>> helloWorld() {
         Map<String, Object> response = new LinkedHashMap<>();
@@ -45,7 +45,7 @@ public class AppController {
         return ResponseEntity.ok(response);
     }
 
-    // App metadata
+    // Metadata
     @GetMapping("/info")
     public ResponseEntity<Map<String, Object>> getInfo() {
         Map<String, Object> response = new LinkedHashMap<>();
@@ -57,7 +57,7 @@ public class AppController {
         return ResponseEntity.ok(response);
     }
 
-    // Server uptime and pod runtime details
+    // System telemetry
     @GetMapping("/system")
     public ResponseEntity<Map<String, Object>> getSystemTelemetry() {
         RuntimeMXBean runtimeBean = ManagementFactory.getRuntimeMXBean();
@@ -73,7 +73,7 @@ public class AppController {
         long freeMemory = runtime.freeMemory() / (1024 * 1024);
         long usedMemory = totalMemory - freeMemory;
 
-        // Environment variables injected from Kubernetes
+        // Pod metadata
         String podName = System.getenv().getOrDefault("HOSTNAME", "local");
         String podIp = System.getenv().getOrDefault("POD_IP", "127.0.0.1");
         String nodeName = System.getenv().getOrDefault("NODE_NAME", "local-node");
@@ -106,7 +106,7 @@ public class AppController {
         return ResponseEntity.ok(response);
     }
 
-    // Health check summary
+    // Status summary
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> getStatus() {
         Map<String, Object> response = new LinkedHashMap<>();

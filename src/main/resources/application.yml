@@ -25,4 +25,4 @@ management:
 app:
   version: "1.0.0"
   blueprint: "Kestra EKS Pipeline"
-  author: "Abhishek"
+  author: "Abhishek Khode"

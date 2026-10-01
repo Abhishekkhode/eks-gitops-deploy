@@ -55,7 +55,7 @@ spec:
             limits:
               cpu: "300m"
               memory: "320Mi"
-          # Readiness probe checks application health before serving traffic
+          # Readiness probe
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
@@ -64,7 +64,7 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 5
-          # Liveness probe restarts pod if unhealthy
+          # Liveness probe
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
