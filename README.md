@@ -41,6 +41,14 @@ flowchart TD
 
 ![Kestra Pipeline Execution Flow](./assets/kestra-ui.png)
 
+### • Kestra Flow Graph
+
+The topology view of the flow in Kestra. The webhook trigger starts the `working_dir` block (clone, Kaniko build and push, EKS deploy). The `check_discord_enabled` `If` task then either sends the success embed (`then`) or logs that notifications are disabled (`else`). The red path is the `errors` handler, which runs `capture_pod_diagnostics_and_alert` if any task fails.
+
+<p align="center">
+  <img src="./assets/flow-graph-1790941710883.jpeg" alt="Kestra flow graph showing the webhook trigger, working directory tasks, the Discord If branch and the error handler" width="520">
+</p>
+
 ---
 
 ## Configuration Reference
@@ -262,7 +270,9 @@ Once deployed, the application exposes the following endpoints via the AWS LoadB
 
 **Abhishek Khode**
 * GitHub: [@Abhishekkhode](https://github.com/Abhishekkhode)
+* Merged PR: [PR #295](https://github.com/kestra-io/blueprints/pull/295)
 * Repository: [eks-gitops-deploy](https://github.com/Abhishekkhode/eks-gitops-deploy)
 * LinkedIn : [Abhishek Khode](https://www.linkedin.com/in/abhishek-khode-1650372a0/)
+
 
 
