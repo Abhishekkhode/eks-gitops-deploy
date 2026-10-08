@@ -273,6 +273,7 @@ Once deployed, the application exposes the following endpoints via the AWS LoadB
 * Merged PR: [PR #295](https://github.com/kestra-io/blueprints/pull/295)
 * Repository: [eks-gitops-deploy](https://github.com/Abhishekkhode/eks-gitops-deploy)
 * LinkedIn : [Abhishek Khode](https://www.linkedin.com/in/abhishek-khode-1650372a0/)
+* Kestra : [AWS EKS GitOps Deploy](https://kestra.io/blueprints/aws-eks-gitops-deploy)
 
 
 
